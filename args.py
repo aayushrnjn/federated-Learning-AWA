@@ -33,7 +33,7 @@ def args_parser():
     
     parser.add_argument('--node_num', type=int, default=20, # 200
                         help="Number of nodes")
-    parser.add_argument('--T', type=int, default=300,  # 100 
+    parser.add_argument('--T', type=int, default=200,  # 100 
                         help="Number of communication rounds")
     parser.add_argument('--E', type=int, default=1, # 3
                         help="Number of local epochs: E")
@@ -59,7 +59,7 @@ def args_parser():
                         help="optimizer epochs on server")
     parser.add_argument('--server_optimizer', type=str, default='adam',
                         help="type of server optimizer, adam or sgd")
-    parser.add_argument('--gamma', type=float, default=1.0,
+    parser.add_argument('--gamma', type=float, default=0.99,
                         help="vector_scale")
     parser.add_argument('--reg_distance', type=str, default='cos',
                         help="cos or euc")
