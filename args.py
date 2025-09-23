@@ -33,7 +33,7 @@ def args_parser():
     
     parser.add_argument('--node_num', type=int, default=20, # 200
                         help="Number of nodes")
-    parser.add_argument('--T', type=int, default=200,  # 100 
+    parser.add_argument('--T', type=int, default=300,  # 100 
                         help="Number of communication rounds")
     parser.add_argument('--E', type=int, default=1, # 3
                         help="Number of local epochs: E")
