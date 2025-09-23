@@ -59,7 +59,7 @@ def args_parser():
                         help="optimizer epochs on server")
     parser.add_argument('--server_optimizer', type=str, default='adam',
                         help="type of server optimizer, adam or sgd")
-    parser.add_argument('--gamma', type=float, default=0.99,
+    parser.add_argument('--gamma', type=float, default=1.0,
                         help="vector_scale")
     parser.add_argument('--reg_distance', type=str, default='cos',
                         help="cos or euc")
