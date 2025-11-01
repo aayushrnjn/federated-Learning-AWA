@@ -32,3 +32,7 @@ Please cite our paper if you find this repo useful in your work:
 ## Acknowledgement
 
 We would like to thank the authors for releasing the public repository: [ICML-2023-FedLAW](https://github.com/ZexiLee/ICML-2023-FedLAW/tree/main)
+
+## Contact
+
+Please feel free to contact via email (changlong.shi@connect.polyu.hk) if you have any questions.
