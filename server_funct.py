@@ -196,6 +196,25 @@ def _cost_matrix(x, y, dis, p=2):
             # print('euc_dis')
             C= torch.mean((torch.abs(x_col - y_lin)) ** p, -1)
         return C
+
+def _layerwise_cost_matrix(global_flat_w, flat_w_list, model, head_distance, body_distance, head_weight, p=2):
+    """Compute cost matrix using separate distance metrics for head (Linear) and body layers.
+
+    Head (Linear/classifier) weights tend to diverge more across clients under non-IID
+    data, so cosine similarity better captures directional drift. Body (Conv/BN) weights
+    stay closer and benefit from L2, which is sensitive to small absolute differences.
+    The two cost matrices are combined via a convex combination controlled by head_weight.
+    """
+    global_head = model.get_head_weights(global_flat_w)   # [H]
+    global_body = model.get_body_weights(global_flat_w)   # [B]
+
+    client_heads = torch.stack([model.get_head_weights(fw) for fw in flat_w_list])   # [K, H]
+    client_bodies = torch.stack([model.get_body_weights(fw) for fw in flat_w_list])  # [K, B]
+
+    C_head = _cost_matrix(global_head.unsqueeze(0), client_heads, head_distance, p)   # [1, K]
+    C_body = _cost_matrix(global_body.unsqueeze(0), client_bodies, body_distance, p)  # [1, K]
+
+    return head_weight * C_head + (1.0 - head_weight) * C_body
 #fedgroupavg_para group mean
 def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_weight):
     param=central_node.model.get_param()
@@ -235,7 +254,17 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
         probability_train = torch.nn.functional.softmax(T_weights, dim=0)
         
 
-        C = _cost_matrix(global_params['flat_w'].detach().unsqueeze(0), local_param_list.detach(), args.reg_distance)
+        if args.layerwise_distance:
+            C = _layerwise_cost_matrix(
+                global_params['flat_w'].detach(),
+                [fw.detach() for fw in flat_w_list],
+                central_node.model,
+                args.head_distance,
+                args.body_distance,
+                args.head_weight,
+            )
+        else:
+            C = _cost_matrix(global_params['flat_w'].detach().unsqueeze(0), local_param_list.detach(), args.reg_distance)
      
         reg_loss = torch.sum(probability_train* C, dim=(-2, -1))
         print("reg_loss:",reg_loss)

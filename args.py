@@ -63,6 +63,14 @@ def args_parser():
                         help="vector_scale")
     parser.add_argument('--reg_distance', type=str, default='cos',
                         help="cos or euc")
+    parser.add_argument('--layerwise_distance', action='store_true', default=False,
+                        help="use separate distance metrics for head (Linear) and body (Conv/BN) layers in FedAWA reg_loss")
+    parser.add_argument('--head_distance', type=str, default='cos',
+                        help="distance metric for head (Linear) layers when --layerwise_distance is set: cos or euc")
+    parser.add_argument('--body_distance', type=str, default='euc',
+                        help="distance metric for body (Conv/BN) layers when --layerwise_distance is set: cos or euc")
+    parser.add_argument('--head_weight', type=float, default=0.5,
+                        help="mixing weight for head cost vs body cost in layerwise distance (0.0-1.0)")
 
                         
     # Client function
