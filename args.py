@@ -91,10 +91,10 @@ def args_parser():
 
     # Federated Dropout
     parser.add_argument('--fed_dropout', type=float, default=0.0,
-                        help="fraction of parameters to drop per round (0.0 = disabled, 0.5 = 50%% reduction). "
-                             "Reduces client-server communication overhead by masking out a random subset of "
-                             "parameters; masked positions are replaced with the current global model values "
-                             "before aggregation so only the unmasked updates contribute to the new global model.")
+                        help="fraction of parameters to drop each round (0.0 = disabled, e.g. 0.5 drops 50%% of "
+                             "parameters). Reduces client-to-server communication overhead by masking out a random "
+                             "subset of parameters; dropped positions are replaced with the current global model "
+                             "values before aggregation so only the kept positions contribute to the new global model.")
 
     args = parser.parse_args()
 

@@ -21,6 +21,13 @@ from sklearn.cluster import KMeans
 # General server function
 ##############################################################################
 
+def _mask_keep_ratio(mask):
+    """Return the fraction of True entries (kept parameters) in a dropout mask."""
+    if isinstance(mask, torch.Tensor):
+        return mask.float().mean().item()
+    return float(np.mean([m.float().mean().item() for m in mask.values()]))
+
+
 def _create_fed_dropout_mask(ref_param, dropout_rate, device):
     """Create a boolean keep-mask for Federated Dropout.
 
@@ -135,19 +142,14 @@ def Server_update(args, central_node, client_nodes, select_list, size_weights,ro
     # --- Federated Dropout: generate a per-round random keep-mask ---
     fed_dropout_mask = None
     global_param_snapshot = None
-    dropout_rate = getattr(args, 'fed_dropout', 0.0)
-    if dropout_rate > 0.0:
+    if args.fed_dropout > 0.0:
         device = next(central_node.model.parameters()).device
         if ('fedawa' in args.server_method) or ('fedlaw' in args.server_method):
             global_param_snapshot = central_node.model.get_param(clone=True)
         else:
             global_param_snapshot = copy.deepcopy(central_node.model.state_dict())
-        fed_dropout_mask = _create_fed_dropout_mask(global_param_snapshot, dropout_rate, device)
-        if isinstance(fed_dropout_mask, torch.Tensor):
-            keep_ratio = fed_dropout_mask.float().mean().item()
-        else:
-            all_keeps = [m.float().mean().item() for m in fed_dropout_mask.values()]
-            keep_ratio = float(np.mean(all_keeps))
+        fed_dropout_mask = _create_fed_dropout_mask(global_param_snapshot, args.fed_dropout, device)
+        keep_ratio = _mask_keep_ratio(fed_dropout_mask)
         print(f"Fed Dropout: keeping {keep_ratio*100:.1f}% of parameters "
               f"(~{(1-keep_ratio)*100:.1f}% communication reduction)")
 
