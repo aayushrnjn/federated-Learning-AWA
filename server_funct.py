@@ -21,15 +21,65 @@ from sklearn.cluster import KMeans
 # General server function
 ##############################################################################
 
-def receive_client_models(args, client_nodes, select_list, size_weights):
+def _create_fed_dropout_mask(ref_param, dropout_rate, device):
+    """Create a boolean keep-mask for Federated Dropout.
+
+    True  = parameter IS communicated (kept).
+    False = parameter is dropped; replaced by the current global model value
+            before aggregation so only the surviving positions contribute to
+            the new global model.
+
+    For FedAWA models the mask covers the single ``flat_w`` vector.
+    For FedAvg models a per-tensor mask is generated for every floating-point
+    entry in the state dict.
+    """
+    if 'flat_w' in ref_param:
+        # FedAWA: one contiguous parameter vector
+        return torch.rand(ref_param['flat_w'].numel(), device=device) >= dropout_rate
+    # FedAvg: independent mask per tensor
+    return {
+        k: torch.rand(v.shape, device=device) >= dropout_rate
+        for k, v in ref_param.items()
+        if v.is_floating_point()
+    }
+
+
+def _apply_fed_dropout_mask(client_param, global_param, mask):
+    """Restore dropped positions in *client_param* from *global_param*.
+
+    Positions where ``mask == False`` are overwritten with the corresponding
+    value from *global_param*, so only the kept positions carry client-specific
+    updates into the aggregation step.
+    """
+    if mask is None:
+        return client_param
+    if isinstance(mask, torch.Tensor):
+        # FedAWA flat_w
+        fw = client_param['flat_w'].clone()
+        fw[~mask] = global_param['flat_w'][~mask].detach()
+        client_param['flat_w'] = fw
+    else:
+        # FedAvg per-tensor
+        for k, m in mask.items():
+            if k in client_param:
+                t = client_param[k].clone()
+                t[~m] = global_param[k][~m].detach()
+                client_param[k] = t
+    return client_param
+
+
+def receive_client_models(args, client_nodes, select_list, size_weights,
+                          mask=None, global_param=None):
     client_params = []
     for idx in select_list:
         if ('fedlaw' in args.server_method) or ('fedawa' in args.server_method):
-            client_params.append(client_nodes[idx].model.get_param(clone = True))
-            
+            p = client_nodes[idx].model.get_param(clone=True)
         else:
-            client_params.append(copy.deepcopy(client_nodes[idx].model.state_dict()))
-    
+            p = copy.deepcopy(client_nodes[idx].model.state_dict())
+        if mask is not None and global_param is not None:
+            p = _apply_fed_dropout_mask(p, global_param, mask)
+        client_params.append(p)
+
     agg_weights = [size_weights[idx] for idx in select_list]
     agg_weights = [w/sum(agg_weights) for w in agg_weights]
 
@@ -37,15 +87,18 @@ def receive_client_models(args, client_nodes, select_list, size_weights):
 
 
 
-def receive_client_models_pool(args, client_nodes, select_list, size_weights):
+def receive_client_models_pool(args, client_nodes, select_list, size_weights,
+                               mask=None, global_param=None):
     client_params = []
     for idx in select_list:
         if ('fedlaw' in args.server_method) or ('fedawa' in args.server_method):
-            client_params.append(client_nodes[idx].model.get_param(clone = True))
-         
+            p = client_nodes[idx].model.get_param(clone=True)
         else:
-            client_params.append(copy.deepcopy(client_nodes[idx].model.state_dict()))
-    
+            p = copy.deepcopy(client_nodes[idx].model.state_dict())
+        if mask is not None and global_param is not None:
+            p = _apply_fed_dropout_mask(p, global_param, mask)
+        client_params.append(p)
+
     agg_weights = [size_weights[idx] for idx in select_list]
 
     return agg_weights, client_params
@@ -79,11 +132,34 @@ def Server_update(args, central_node, client_nodes, select_list, size_weights,ro
         size_weights_global=size_weights
     
 
+    # --- Federated Dropout: generate a per-round random keep-mask ---
+    fed_dropout_mask = None
+    global_param_snapshot = None
+    dropout_rate = getattr(args, 'fed_dropout', 0.0)
+    if dropout_rate > 0.0:
+        device = next(central_node.model.parameters()).device
+        if ('fedawa' in args.server_method) or ('fedlaw' in args.server_method):
+            global_param_snapshot = central_node.model.get_param(clone=True)
+        else:
+            global_param_snapshot = copy.deepcopy(central_node.model.state_dict())
+        fed_dropout_mask = _create_fed_dropout_mask(global_param_snapshot, dropout_rate, device)
+        if isinstance(fed_dropout_mask, torch.Tensor):
+            keep_ratio = fed_dropout_mask.float().mean().item()
+        else:
+            all_keeps = [m.float().mean().item() for m in fed_dropout_mask.values()]
+            keep_ratio = float(np.mean(all_keeps))
+        print(f"Fed Dropout: keeping {keep_ratio*100:.1f}% of parameters "
+              f"(~{(1-keep_ratio)*100:.1f}% communication reduction)")
+
     # receive the local models from clients
     if args.server_method == 'fedawa':
-        agg_weights, client_params = receive_client_models_pool(args, client_nodes, select_list, size_weights_global)
+        agg_weights, client_params = receive_client_models_pool(
+            args, client_nodes, select_list, size_weights_global,
+            mask=fed_dropout_mask, global_param=global_param_snapshot)
     else:
-        agg_weights, client_params = receive_client_models(args, client_nodes, select_list, size_weights)
+        agg_weights, client_params = receive_client_models(
+            args, client_nodes, select_list, size_weights,
+            mask=fed_dropout_mask, global_param=global_param_snapshot)
     print(agg_weights)
     
 

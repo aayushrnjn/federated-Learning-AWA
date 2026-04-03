@@ -89,6 +89,13 @@ def args_parser():
     parser.add_argument('--mu', type=float, default=0.001,
                         help="clients proximal term mu for FedProx")
 
+    # Federated Dropout
+    parser.add_argument('--fed_dropout', type=float, default=0.0,
+                        help="fraction of parameters to drop per round (0.0 = disabled, 0.5 = 50%% reduction). "
+                             "Reduces client-server communication overhead by masking out a random subset of "
+                             "parameters; masked positions are replaced with the current global model values "
+                             "before aggregation so only the unmasked updates contribute to the new global model.")
+
     args = parser.parse_args()
 
     return args
