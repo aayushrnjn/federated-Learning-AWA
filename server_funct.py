@@ -243,8 +243,7 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
         # --- Compute adaptive lambda ---
         if args.lambda_schedule == 'decay':
             # Exponential decay: lambda_r = max(1.0, loss_lambda * decay^round)
-            # Halves the extra weight roughly every 50 rounds
-            decay_rate = 0.5 ** (1.0 / 50.0)
+            decay_rate = 0.5 ** (1.0 / args.lambda_decay_halflife)
             lam = max(1.0, args.loss_lambda * (decay_rate ** rounds))
         else:
             lam = args.loss_lambda
@@ -275,6 +274,7 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
 
         # --- Apply adaptive lambda ---
         if args.lambda_schedule == 'gradnorm':
+            _GRADNORM_EPS = 1e-8  # guard against division by zero when gradient norms are negligible
             # Temporarily compute individual gradients to balance scale
             sim_loss.backward(retain_graph=True)
             grad_sim_norm = T_weights.grad.norm().item() if T_weights.grad is not None else 1.0
@@ -284,7 +284,7 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
             grad_reg_norm = T_weights.grad.norm().item() if T_weights.grad is not None else 1.0
             T_weights.grad = None
 
-            lam = (grad_sim_norm / grad_reg_norm) if grad_reg_norm > 1e-8 else 1.0
+            lam = (grad_sim_norm / grad_reg_norm) if grad_reg_norm > _GRADNORM_EPS else 1.0
             print(f"gradnorm lambda: {lam:.4f}")
 
         Loss = sim_loss + lam * reg_loss

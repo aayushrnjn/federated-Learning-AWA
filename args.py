@@ -73,9 +73,14 @@ def args_parser():
                         choices=['none', 'decay', 'gradnorm'],
                         help="adaptive schedule for loss_lambda. "
                              "'none': fixed value from --loss_lambda. "
-                             "'decay': lambda decays from --loss_lambda toward 1.0 exponentially over rounds. "
+                             "'decay': lambda decays from --loss_lambda toward 1.0 exponentially over rounds "
+                             "(controlled by --lambda_decay_halflife). "
                              "'gradnorm': lambda is rebalanced each server step so both loss gradients "
-                             "contribute equally (||grad_sim|| / ||grad_reg||).")
+                             "contribute equally (||grad_sim|| / ||grad_reg||); "
+                             "note this performs two extra backward passes per server iteration.")
+    parser.add_argument('--lambda_decay_halflife', type=float, default=50.0,
+                        help="number of rounds over which lambda halves toward 1.0 when --lambda_schedule=decay. "
+                             "Default 50 rounds.")
 
                         
     # Client function
