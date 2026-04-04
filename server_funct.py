@@ -347,8 +347,14 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
         reg_loss = torch.sum(probability_train* C, dim=(-2, -1))
         print("reg_loss:",reg_loss)
 
-
-
+        # --- Compute adaptive lambda ---
+        if args.lambda_schedule == 'decay':
+            # Exponential decay: lambda_r = max(1.0, loss_lambda * decay^round)
+            # Halves the extra weight roughly every 50 rounds
+            decay_rate = 0.5 ** (1.0 / 50.0)
+            lam = max(1.0, args.loss_lambda * (decay_rate ** rounds))
+        else:
+            lam = args.loss_lambda
 
 
 
@@ -373,8 +379,24 @@ def fedawa(args,parameters, list_nums_local_data,central_node,rounds,global_T_we
         sim_loss=(torch.sum(probability_train*l2_distance, dim=(-2, -1)))
 
         print("Sim_loss:",sim_loss)
-     
-        Loss=sim_loss+reg_loss
+
+        # --- Apply adaptive lambda ---
+        if args.lambda_schedule == 'gradnorm':
+            # Temporarily compute individual gradients to balance scale
+            sim_loss.backward(retain_graph=True)
+            grad_sim_norm = T_weights.grad.norm().item() if T_weights.grad is not None else 1.0
+            T_weights.grad = None
+
+            (lam * reg_loss).backward(retain_graph=True)
+            grad_reg_norm = T_weights.grad.norm().item() if T_weights.grad is not None else 1.0
+            T_weights.grad = None
+
+            lam = (grad_sim_norm / grad_reg_norm) if grad_reg_norm > 1e-8 else 1.0
+            print(f"gradnorm lambda: {lam:.4f}")
+
+        Loss = sim_loss + lam * reg_loss
+        print(f"lambda: {lam:.4f}  sim_loss: {sim_loss.item():.6f}  reg_loss: {reg_loss.item():.6f}")
+
         Attoptimizer.zero_grad()
         Loss.backward()
         Attoptimizer.step()

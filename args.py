@@ -72,6 +72,19 @@ def args_parser():
     parser.add_argument('--head_weight', type=float, default=0.5,
                         help="mixing weight for head cost vs body cost in layerwise distance (0.0-1.0)")
 
+    # Adaptive loss weighting (sim_loss + lambda * reg_loss)
+    parser.add_argument('--loss_lambda', type=float, default=1.0,
+                        help="weight applied to reg_loss: Loss = sim_loss + loss_lambda * reg_loss. "
+                             "Default 1.0 (original equal-weight behaviour). "
+                             "Use in combination with --lambda_schedule.")
+    parser.add_argument('--lambda_schedule', type=str, default='none',
+                        choices=['none', 'decay', 'gradnorm'],
+                        help="adaptive schedule for loss_lambda. "
+                             "'none': fixed value from --loss_lambda. "
+                             "'decay': lambda decays from --loss_lambda toward 1.0 exponentially over rounds. "
+                             "'gradnorm': lambda is rebalanced each server step so both loss gradients "
+                             "contribute equally (||grad_sim|| / ||grad_reg||).")
+
                         
     # Client function
     parser.add_argument('--client_method', type=str, default='local_train',
